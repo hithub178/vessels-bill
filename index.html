@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AR VESSELS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topbar no-print">
+        <div class="brand">
+          <button class="mark" id="shop-mark" type="button" title="Shop settings">VP</button>
+          <div>
+            <input
+              class="shop-name"
+              id="shop-name"
+              type="text"
+              maxlength="48"
+              aria-label="Shop name"
+            />
+            <p class="shop-meta" id="clock"></p>
+          </div>
+        </div>
+        <nav class="tabs" aria-label="Main">
+          <button class="tab is-active" data-view="billing" type="button">Billing</button>
+          <button class="tab" data-view="menu" type="button">Menu</button>
+          <button class="tab" data-view="history" type="button">History</button>
+        </nav>
+        <p class="gst-note">No GST</p>
+      </header>
+
+      <section class="view is-active" id="view-billing" data-view-panel="billing">
+        <div class="catalog">
+          <div class="catalog-bar">
+            <label class="search">
+              <span class="sr-only">Search vessels</span>
+              <input id="search" type="search" placeholder="Search vessels…" />
+            </label>
+            <button class="btn primary" id="btn-add-vessel" type="button">+ Add Vessel</button>
+          </div>
+          <div class="vessel-grid" id="vessel-grid"></div>
+        </div>
+
+        <aside class="ticket" aria-label="Current bill">
+          <div class="ticket-head">
+            <div>
+              <p class="eyebrow">Current bill</p>
+              <h2 id="draft-no">Draft</h2>
+            </div>
+            <button class="btn ghost" id="btn-new-bill" type="button">New</button>
+          </div>
+          <label class="field">
+            <span>Customer</span>
+            <input id="customer" type="text" placeholder="Walk-in" maxlength="60" />
+          </label>
+          <div class="ticket-cols">
+            <span>Item</span>
+            <span>Qty</span>
+            <span>Rate</span>
+            <span>Amount</span>
+          </div>
+          <ul class="lines" id="bill-lines"></ul>
+          <div class="ticket-foot">
+            <div class="totals">
+              <p>Items <strong id="item-count">0</strong></p>
+              <p class="grand">
+                Grand Total
+                <strong id="grand-total">₹0.00</strong>
+              </p>
+              <p class="hint">No GST applied</p>
+            </div>
+            <div class="ticket-actions">
+              <button class="btn primary wide" id="btn-save" type="button">Save bill</button>
+              <button class="btn" id="btn-print" type="button">Print bill</button>
+            </div>
+            <p class="hint">Prints on 55mm thermal. Choose your Bluetooth printer — not Save as PDF.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="view" id="view-menu" data-view-panel="menu">
+        <div class="menu-wrap">
+          <div class="catalog-bar">
+            <h2 class="page-title">Menu</h2>
+            <button class="btn primary" id="btn-add-vessel-menu" type="button">+ Add Vessel</button>
+          </div>
+          <p class="lede">
+            Add vessels by <strong>weight (KG)</strong> or <strong>unit</strong>. On Billing, clicking a
+            card asks for KG or units. Qty and rate stay editable on the bill.
+          </p>
+          <div class="menu-table-wrap">
+            <table class="menu-table">
+              <thead>
+                <tr>
+                  <th>Vessel</th>
+                  <th>Sold by</th>
+                  <th>Default qty</th>
+                  <th>Rate</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="menu-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-history" data-view-panel="history">
+        <div class="history-wrap">
+          <div class="catalog-bar">
+            <h2 class="page-title">Monthly bill history</h2>
+            <label class="month-pick">
+              <span class="sr-only">Month</span>
+              <input id="month-filter" type="month" />
+            </label>
+          </div>
+          <div class="history-stats" id="history-stats"></div>
+          <div class="history-layout">
+            <ul class="history-list" id="history-list"></ul>
+            <div class="bill-preview-wrap" id="bill-preview-wrap" hidden>
+              <p class="eyebrow">Saved bill</p>
+              <div class="receipt" id="bill-preview"></div>
+              <div class="history-actions preview-actions">
+                <button class="btn primary" type="button" id="btn-print-preview">Print bill</button>
+                <button class="btn danger" type="button" id="btn-delete-preview">Delete</button>
+                <button class="btn ghost" type="button" id="btn-close-preview">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-root no-print" id="modal-root" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="vessel-modal-title">
+        <h2 id="vessel-modal-title">Add Vessel</h2>
+        <form id="vessel-form">
+          <label class="photo-pick">
+            <input id="vessel-image" type="file" accept="image/*" hidden />
+            <div class="photo-frame" id="photo-frame">
+              <span>Upload image</span>
+            </div>
+          </label>
+          <label class="field">
+            <span>Vessel name</span>
+            <input id="vessel-name" type="text" required maxlength="48" placeholder="e.g. King Fish" />
+          </label>
+          <fieldset class="sold-by">
+            <legend>Sold by</legend>
+            <label>
+              <input type="radio" name="sold-by" value="weight" checked />
+              Weight (KG)
+            </label>
+            <label>
+              <input type="radio" name="sold-by" value="unit" />
+              Unit
+            </label>
+          </fieldset>
+          <div class="row">
+            <label class="field">
+              <span id="qty-label">Default weight (KG)</span>
+              <input id="vessel-qty" type="number" min="0.01" step="0.01" value="1" required />
+            </label>
+            <label class="field">
+              <span id="rate-label">Price / KG</span>
+              <input id="vessel-price" type="number" min="0" step="0.01" required placeholder="0.00" />
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button class="btn ghost" type="button" id="btn-cancel-vessel">Cancel</button>
+            <button class="btn primary" type="submit">Save vessel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-root no-print" id="qty-modal-root" hidden>
+      <div class="modal qty-modal" role="dialog" aria-modal="true" aria-labelledby="qty-modal-title">
+        <h2 id="qty-modal-title">Enter weight</h2>
+        <p class="lede" id="qty-modal-hint"></p>
+        <form id="qty-form">
+          <label class="field">
+            <span id="qty-input-label">Weight (KG)</span>
+            <input id="qty-input" type="number" min="0.01" step="0.01" required autofocus />
+          </label>
+          <div class="modal-actions">
+            <button class="btn ghost" type="button" id="btn-cancel-qty">Cancel</button>
+            <button class="btn primary" type="submit">Add to bill</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="print-sheet" id="print-sheet" aria-hidden="true"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
