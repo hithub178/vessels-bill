@@ -724,45 +724,67 @@ button {
 }
 
 .receipt h1 {
-  margin: 0 0 4px;
-  font-size: 14px;
+  margin: 0 0 2px;
+  font-size: 13px;
   text-align: center;
   text-transform: uppercase;
   font-family: inherit;
 }
 
-.rc-sub,
+.rc-phone,
+.rc-date,
 .rc-thanks {
   text-align: center;
-  margin: 4px 0;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  margin: 2px 0;
+}
+
+.rc-thanks {
+  margin-top: 8px;
 }
 
 .receipt p {
   margin: 2px 0;
 }
 
-.rc-rule {
-  border-top: 1px dashed #111;
-  margin: 6px 0;
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 4px;
+  font-size: 9px;
 }
 
-.rc-name {
+.rc-table th,
+.rc-table td {
+  padding: 3px 2px;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.rc-table th {
+  border-bottom: 1px dashed #111;
   font-weight: 700;
+  text-align: left;
 }
 
-.rc-row,
+.rc-table td {
+  border-bottom: 1px dotted #ccc;
+}
+
+.rc-table .num,
+.rc-table th.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
 .rc-total {
   display: flex;
   justify-content: space-between;
   gap: 6px;
-}
-
-.rc-total {
   font-weight: 700;
-  font-size: 13px;
-  margin-top: 4px;
+  font-size: 12px;
+  margin-top: 6px;
+  border-top: 1px dashed #111;
+  padding-top: 4px;
 }
 
 @media (max-width: 1100px) {
