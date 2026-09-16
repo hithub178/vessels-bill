@@ -531,17 +531,291 @@ function showHistoryBill(id) {
   wrap.hidden = false;
 }
 
-function printBill(bill) {
-  document.getElementById("print-sheet").innerHTML = receiptHtml(bill);
-  const previousTitle = document.title;
-  document.title = bill.number || "Bill";
-  window.print();
-  const restore = () => {
-    document.title = previousTitle;
-    window.removeEventListener("afterprint", restore);
+const BLE_SERVICES = [
+  "000018f0-0000-1000-8000-00805f9b34fb",
+  "0000ff00-0000-1000-8000-00805f9b34fb",
+  "0000ffe0-0000-1000-8000-00805f9b34fb",
+  "0000ae30-0000-1000-8000-00805f9b34fb",
+  "0000ffb0-0000-1000-8000-00805f9b34fb",
+  "0000fff0-0000-1000-8000-00805f9b34fb",
+  "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+  "e7810a71-73ac-3050-50a7-d64aa3b1e4e0",
+];
+
+const bt = {
+  device: null,
+  char: null,
+  port: null,
+  pendingBill: null,
+};
+
+function printerMsg(text) {
+  const el = document.getElementById("printer-msg");
+  if (el) el.textContent = text || "";
+}
+
+function printerReady() {
+  return Boolean((bt.char && bt.device) || (bt.port && bt.port.writable));
+}
+
+function updatePrinterLabel() {
+  const box = document.querySelector(".printer-status");
+  const label = document.getElementById("printer-label");
+  const btn = document.getElementById("btn-connect-bt");
+  const hint = document.getElementById("print-hint");
+  const ready = printerReady();
+  if (box) box.classList.toggle("is-on", ready);
+  if (label) {
+    label.textContent = ready
+      ? "Connected: " + (bt.device?.name || "Bluetooth printer")
+      : "Printer not connected";
+  }
+  if (btn) btn.textContent = ready ? "Change printer" : "Connect Bluetooth";
+  if (hint) {
+    hint.textContent = ready
+      ? "Print bill sends this bill to your 55mm Bluetooth printer."
+      : "Turn on the printer’s Bluetooth, tap Connect Bluetooth, pick the 55mm printer, then Print bill.";
+  }
+}
+
+function openPrinterModal() {
+  const root = document.getElementById("printer-modal-root");
+  if (!root) return;
+  printerMsg("");
+  root.hidden = false;
+}
+
+function closePrinterModal() {
+  const root = document.getElementById("printer-modal-root");
+  if (root) root.hidden = true;
+}
+
+function ascii(str) {
+  return String(str || "")
+    .replace(/₹/g, "Rs ")
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E\n]/g, "?");
+}
+
+function padLine(left, right, width) {
+  const l = ascii(left);
+  const r = ascii(right);
+  return l + " ".repeat(Math.max(1, width - l.length - r.length)) + r;
+}
+
+function centerLine(text, width) {
+  const t = ascii(text).slice(0, width);
+  return " ".repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
+}
+
+function receiptText(bill) {
+  const w = 32;
+  const lines = [
+    centerLine(state.shop.name || BUSINESS, w),
+    centerLine("BILL", w),
+    "-".repeat(w),
+    ascii(bill.number || ""),
+    ascii(new Date(bill.createdAt).toLocaleString("en-IN")),
+    ascii("Cust: " + (bill.customer || "Walk-in")),
+    "-".repeat(w),
+  ];
+  (bill.lines || []).forEach((raw) => {
+    const line = normalizeLine(raw);
+    const qty = line.soldBy === "unit" ? `${line.qty} u` : `${Number(line.qty).toFixed(2)} kg`;
+    const amt = lineAmount(line);
+    lines.push(ascii(line.name));
+    lines.push(padLine(`${qty} x Rs ${Number(line.rate).toFixed(2)}`, `Rs ${amt.toFixed(2)}`, w));
+  });
+  lines.push("-".repeat(w));
+  lines.push(padLine("TOTAL", `Rs ${Number(bill.grandTotal || 0).toFixed(2)}`, w));
+  lines.push(centerLine("No GST", w));
+  lines.push(centerLine("Thank you", w));
+  lines.push("", "", "", "");
+  return lines.join("\n") + "\n";
+}
+
+function escPosBytes(bill) {
+  const ESC = 0x1b;
+  const GS = 0x1d;
+  const init = Uint8Array.from([ESC, 0x40, ESC, 0x61, 0x00]);
+  const body = new TextEncoder().encode(receiptText(bill));
+  const cut = Uint8Array.from([GS, 0x56, 0x41, 0x03]);
+  const out = new Uint8Array(init.length + body.length + cut.length);
+  out.set(init, 0);
+  out.set(body, init.length);
+  out.set(cut, init.length + body.length);
+  return out;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function writeChunks(writeFn, bytes, size) {
+  for (let i = 0; i < bytes.length; i += size) {
+    await writeFn(bytes.slice(i, i + size));
+    await delay(20);
+  }
+}
+
+async function findPrinterChar(server) {
+  const services = [];
+  try {
+    services.push(...(await server.getPrimaryServices()));
+  } catch {
+    for (const uuid of BLE_SERVICES) {
+      try {
+        services.push(await server.getPrimaryService(uuid));
+      } catch {
+        /* skip missing service */
+      }
+    }
+  }
+  for (const service of services) {
+    try {
+      const chars = await service.getCharacteristics();
+      const writable = chars.find(
+        (c) => c.properties.writeWithoutResponse || c.properties.write || c.properties.reliableWrite
+      );
+      if (writable) return writable;
+    } catch {
+      /* skip */
+    }
+  }
+  return null;
+}
+
+async function connectBluetoothPrinter() {
+  printerMsg("Opening Bluetooth list…");
+  try {
+    if (!navigator.bluetooth) {
+      printerMsg("Use Chrome or Edge. Firefox cannot connect Bluetooth printers.");
+      return;
+    }
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: BLE_SERVICES,
+    });
+    printerMsg("Connecting to " + (device.name || "printer") + "…");
+    const server = await device.gatt.connect();
+    const char = await findPrinterChar(server);
+    if (!char) {
+      printerMsg("That Bluetooth device has no print channel. Try COM port if Windows already paired it.");
+      return;
+    }
+    bt.device = device;
+    bt.char = char;
+    bt.port = null;
+    device.addEventListener("gattserverdisconnected", () => {
+      bt.char = null;
+      bt.device = null;
+      updatePrinterLabel();
+    });
+    printerMsg("Connected.");
+    updatePrinterLabel();
+    closePrinterModal();
+    if (bt.pendingBill) {
+      const bill = bt.pendingBill;
+      bt.pendingBill = null;
+      await sendToPrinter(bill);
+    }
+  } catch (err) {
+    if (err && err.name === "NotFoundError") printerMsg("No Bluetooth printer selected.");
+    else printerMsg((err && err.message) || "Bluetooth connect failed. Turn on the printer and try again.");
+  }
+}
+
+async function connectSerialPrinter() {
+  printerMsg("Opening port list…");
+  try {
+    if (!navigator.serial) {
+      printerMsg("COM port needs Chrome or Edge.");
+      return;
+    }
+    const port = await navigator.serial.requestPort();
+    if (!port.readable) await port.open({ baudRate: 9600 });
+    bt.port = port;
+    bt.char = null;
+    port.addEventListener("disconnect", () => {
+      bt.port = null;
+      updatePrinterLabel();
+    });
+    printerMsg("COM printer connected.");
+    updatePrinterLabel();
+    closePrinterModal();
+    if (bt.pendingBill) {
+      const bill = bt.pendingBill;
+      bt.pendingBill = null;
+      await sendToPrinter(bill);
+    }
+  } catch (err) {
+    if (err && err.name === "NotFoundError") printerMsg("No port selected.");
+    else printerMsg((err && err.message) || "COM connect failed.");
+  }
+}
+
+async function sendToPrinter(bill) {
+  const bytes = escPosBytes(bill);
+  if (bt.char) {
+    const noResp = bt.char.properties.writeWithoutResponse;
+    await writeChunks(async (chunk) => {
+      if (noResp) await bt.char.writeValueWithoutResponse(chunk);
+      else await bt.char.writeValue(chunk);
+    }, bytes, 20);
+    return;
+  }
+  if (bt.port) {
+    if (!bt.port.writable) await bt.port.open({ baudRate: 9600 });
+    const writer = bt.port.writable.getWriter();
+    try {
+      await writeChunks((chunk) => writer.write(chunk), bytes, 64);
+    } finally {
+      writer.releaseLock();
+    }
+    return;
+  }
+  throw new Error("Printer not connected");
+}
+
+function currentDraftBill() {
+  const editing = state.bills.find((b) => b.id === state.draft.billId);
+  return {
+    number: editing?.number || "DRAFT",
+    createdAt: editing?.createdAt || new Date().toISOString(),
+    customer: state.draft.customer,
+    lines: state.draft.lines,
+    grandTotal: draftTotal(),
   };
-  window.addEventListener("afterprint", restore);
-  setTimeout(restore, 1500);
+}
+
+function printCurrentBill() {
+  if (!state.draft.lines.length) {
+    alert("Add at least one vessel to print.");
+    return;
+  }
+  printBill(currentDraftBill());
+}
+
+function printPreviewBill() {
+  const bill = state.bills.find((b) => b.id === state.previewBillId);
+  if (bill) printBill(bill);
+}
+
+async function printBill(bill) {
+  if (!printerReady()) {
+    bt.pendingBill = bill;
+    openPrinterModal();
+    printerMsg("Connect the 55mm Bluetooth printer, then this bill will print.");
+    return;
+  }
+  try {
+    await sendToPrinter(bill);
+  } catch (err) {
+    bt.pendingBill = bill;
+    openPrinterModal();
+    printerMsg((err && err.message) || "Print failed. Connect the printer again.");
+    updatePrinterLabel();
+  }
 }
 
 function saveBill() {
@@ -710,26 +984,7 @@ function bind() {
   });
 
   document.getElementById("btn-save").addEventListener("click", saveBill);
-  document.getElementById("btn-print").addEventListener("click", () => {
-    if (!state.draft.lines.length) {
-      alert("Add at least one vessel to print.");
-      return;
-    }
-    const editing = state.bills.find((b) => b.id === state.draft.billId);
-    printBill({
-      number: editing?.number || "DRAFT",
-      createdAt: editing?.createdAt || new Date().toISOString(),
-      customer: state.draft.customer,
-      lines: state.draft.lines,
-      grandTotal: draftTotal(),
-    });
-  });
   document.getElementById("btn-new-bill").addEventListener("click", newBill);
-
-  document.getElementById("btn-print-preview").addEventListener("click", () => {
-    const bill = state.bills.find((b) => b.id === state.previewBillId);
-    if (bill) printBill(bill);
-  });
   document.getElementById("btn-delete-preview").addEventListener("click", () => {
     if (state.previewBillId) deleteBill(state.previewBillId);
   });
@@ -823,6 +1078,7 @@ function bind() {
   });
 
   setInterval(renderClock, 30000);
+  updatePrinterLabel();
 }
 
 persist();
