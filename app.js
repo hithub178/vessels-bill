@@ -6,6 +6,7 @@ const STORAGE = {
 };
 
 const BUSINESS = "AR VESSELS";
+const PHONES = ["+91 9442375804", "6383828398"];
 
 const money = (n) =>
   "₹" +
@@ -291,9 +292,9 @@ function renderBill() {
         const by = line.soldBy;
         return `
         <li class="line">
-          <span class="name">${escapeHtml(line.name)}<span class="meta">${qtyLabel(by)}</span></span>
+          <span class="name">${escapeHtml(line.name)}</span>
+          <input type="number" min="0" step="0.01" value="${line.rate}" data-line-rate="${line.id}" aria-label="Price" />
           <input type="number" min="0.01" step="0.01" value="${line.qty}" data-line-qty="${line.id}" aria-label="${qtyLabel(by)}" />
-          <input type="number" min="0" step="0.01" value="${line.rate}" data-line-rate="${line.id}" aria-label="${rateLabel(by)}" />
           <span class="amt">${money(lineAmount(line))}</span>
           <button class="btn tiny ghost" type="button" data-remove="${line.id}" aria-label="Remove">✕</button>
         </li>`;
@@ -476,39 +477,54 @@ function paintPhoto() {
   }
 }
 
+function receiptDateTime(iso) {
+  return new Date(iso).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function qtyText(line) {
   const n = normalizeLine(line);
-  if (n.soldBy === "unit") return `${Number(n.qty)} u`;
-  return `${Number(n.qty).toFixed(2)} kg`;
+  if (n.soldBy === "unit") return String(Number(n.qty));
+  return Number(n.qty).toFixed(2);
 }
 
 function receiptInner(bill) {
-  const shop = escapeHtml(state.shop.name || BUSINESS);
   const rows = bill.lines
     .map((raw) => {
       const line = normalizeLine(raw);
-      return `
-        <div class="rc-item">
-          <p class="rc-name">${escapeHtml(line.name)}</p>
-          <p class="rc-row">
-            <span>${qtyText(line)} x ${money(line.rate)}</span>
-            <span>${money(lineAmount(line))}</span>
-          </p>
-        </div>`;
+      return `<tr>
+        <td>${escapeHtml(line.name)}</td>
+        <td class="num">${money(line.rate)}</td>
+        <td class="num">${qtyText(line)}</td>
+        <td class="num">${money(lineAmount(line))}</td>
+      </tr>`;
     })
     .join("");
   return `
-    <h1>${shop}</h1>
-    <p class="rc-sub">BILL</p>
-    <p>${escapeHtml(bill.number)}</p>
-    <p>${new Date(bill.createdAt).toLocaleString("en-IN")}</p>
-    <p>${escapeHtml(bill.customer || "Walk-in")}</p>
-    <div class="rc-rule"></div>
-    ${rows}
-    <div class="rc-rule"></div>
-    <p class="rc-total"><span>TOTAL</span><span>${money(bill.grandTotal)}</span></p>
-    <p class="rc-sub">No GST</p>
-    <p class="rc-thanks">Thank you</p>
+    <h1>AR VESSELS</h1>
+    <p class="rc-phone">+91 9442375804</p>
+    <p class="rc-phone">6383828398</p>
+    <p class="rc-date">${receiptDateTime(bill.createdAt)}</p>
+    ${bill.customer ? `<p>${escapeHtml(bill.customer)}</p>` : ""}
+    <table class="rc-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th class="num">Price</th>
+          <th class="num"></th>
+          <th class="num">Total</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="rc-total"><span>Grand Total</span><span>${money(bill.grandTotal)}</span></p>
+    <p class="rc-thanks">Thanks for visiting!</p>
   `;
 }
 
@@ -608,29 +624,45 @@ function centerLine(text, width) {
   return " ".repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
 }
 
+function cell(text, width, align) {
+  const s = ascii(String(text ?? "")).slice(0, width);
+  return align === "right" ? s.padStart(width, " ") : s.padEnd(width, " ");
+}
+
+function itemCols(name, price, qty, total) {
+  return cell(name, 9) + cell(price, 7, "right") + cell(qty, 8, "right") + cell(total, 8, "right");
+}
+
 function receiptText(bill) {
   const w = 32;
+  const when = receiptDateTime(bill.createdAt);
   const lines = [
-    centerLine(state.shop.name || BUSINESS, w),
-    centerLine("BILL", w),
+    centerLine("AR VESSELS", w),
+    centerLine(PHONES[0], w),
+    centerLine(PHONES[1], w),
+    centerLine(when, w),
     "-".repeat(w),
-    ascii(bill.number || ""),
-    ascii(new Date(bill.createdAt).toLocaleString("en-IN")),
-    ascii("Cust: " + (bill.customer || "Walk-in")),
+    itemCols("#", "Price", "", "Total"),
     "-".repeat(w),
   ];
   (bill.lines || []).forEach((raw) => {
     const line = normalizeLine(raw);
-    const qty = line.soldBy === "unit" ? `${line.qty} u` : `${Number(line.qty).toFixed(2)} kg`;
-    const amt = lineAmount(line);
-    lines.push(ascii(line.name));
-    lines.push(padLine(`${qty} x Rs ${Number(line.rate).toFixed(2)}`, `Rs ${amt.toFixed(2)}`, w));
+    const price = Number(line.rate).toFixed(2);
+    const qty = qtyText(line);
+    const total = Number(lineAmount(line)).toFixed(2);
+    const name = ascii(line.name);
+    if (name.length > 9) {
+      lines.push(name.slice(0, w));
+      lines.push(itemCols("", price, qty, total));
+    } else {
+      lines.push(itemCols(name, price, qty, total));
+    }
   });
   lines.push("-".repeat(w));
-  lines.push(padLine("TOTAL", `Rs ${Number(bill.grandTotal || 0).toFixed(2)}`, w));
-  lines.push(centerLine("No GST", w));
-  lines.push(centerLine("Thank you", w));
-  lines.push("", "", "", "");
+  lines.push(padLine("Grand Total", Number(bill.grandTotal || 0).toFixed(2), w));
+  lines.push("");
+  lines.push(centerLine("Thanks for visiting!", w));
+  lines.push("", "", "");
   return lines.join("\n") + "\n";
 }
 
