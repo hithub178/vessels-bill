@@ -33,7 +33,12 @@
           <button class="tab" data-view="menu" type="button">Menu</button>
           <button class="tab" data-view="history" type="button">History</button>
         </nav>
-        <p class="gst-note">No GST</p>
+        <div class="printer-status">
+          <span id="printer-label">Printer not connected</span>
+          <button class="btn tiny" type="button" id="btn-connect-bt" onclick="openPrinterModal()">
+            Connect Bluetooth
+          </button>
+        </div>
       </header>
 
       <section class="view is-active" id="view-billing" data-view-panel="billing">
@@ -78,9 +83,9 @@
             </div>
             <div class="ticket-actions">
               <button class="btn primary wide" id="btn-save" type="button">Save bill</button>
-              <button class="btn" id="btn-print" type="button">Print bill</button>
+              <button class="btn" id="btn-print" type="button" onclick="printCurrentBill()">Print bill</button>
             </div>
-            <p class="hint">Prints on 55mm thermal. Choose your Bluetooth printer — not Save as PDF.</p>
+            <p class="hint" id="print-hint">Turn on the printer’s Bluetooth, tap Connect Bluetooth, pick the 55mm printer, then Print bill.</p>
           </div>
         </aside>
       </section>
@@ -128,7 +133,7 @@
               <p class="eyebrow">Saved bill</p>
               <div class="receipt" id="bill-preview"></div>
               <div class="history-actions preview-actions">
-                <button class="btn primary" type="button" id="btn-print-preview">Print bill</button>
+                <button class="btn primary" type="button" id="btn-print-preview" onclick="printPreviewBill()">Print bill</button>
                 <button class="btn danger" type="button" id="btn-delete-preview">Delete</button>
                 <button class="btn ghost" type="button" id="btn-close-preview">Close</button>
               </div>
@@ -195,6 +200,29 @@
             <button class="btn primary" type="submit">Add to bill</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div class="modal-root no-print" id="printer-modal-root" hidden onclick="if(event.target===this)closePrinterModal()">
+      <div class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <h2>Connect Bluetooth printer</h2>
+        <ol class="lede printer-steps">
+          <li>Switch on Bluetooth on the 55mm printer.</li>
+          <li>Tap <strong>Connect Bluetooth</strong> below.</li>
+          <li>Pick your printer in the Bluetooth list (not a Wi‑Fi or USB printer).</li>
+        </ol>
+        <div class="ticket-actions">
+          <button class="btn primary wide" type="button" onclick="connectBluetoothPrinter()">
+            Connect Bluetooth
+          </button>
+          <button class="btn wide" type="button" onclick="connectSerialPrinter()">
+            Connect COM port (Windows paired)
+          </button>
+        </div>
+        <p class="hint" id="printer-msg"></p>
+        <div class="modal-actions">
+          <button class="btn ghost" type="button" onclick="closePrinterModal()">Close</button>
+        </div>
       </div>
     </div>
 
