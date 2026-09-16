@@ -118,14 +118,27 @@ button {
   color: #f6efe4;
 }
 
-.gst-note {
+.printer-status {
   margin-left: auto;
-  margin-top: 0;
-  margin-bottom: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.printer-status span {
+  font-size: 0.78rem;
   color: var(--ink-soft);
+}
+
+.printer-status.is-on span {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.printer-steps {
+  padding-left: 1.2rem;
+  margin: 0 0 14px;
 }
 
 .view {
@@ -790,8 +803,11 @@ button {
     padding: 10px 8px;
   }
 
-  .gst-note {
-    margin-left: auto;
+  .printer-status {
+    margin-left: 0;
+    width: 100%;
+    order: 4;
+    justify-content: space-between;
   }
 
   #view-billing {
@@ -834,8 +850,8 @@ button {
     font-size: 1.1rem;
   }
 
-  .gst-note {
-    display: none;
+  .printer-status {
+    width: 100%;
   }
 
   .vessel-grid {
