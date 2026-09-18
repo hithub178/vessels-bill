@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AR VESSELS</title>
+    <title>ABDUL RAHMAN VESSELS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="">
   </head>
   <body>
     <div class="app" id="app">
@@ -36,7 +37,7 @@
         <div class="printer-status">
           <span id="printer-label">Printer not connected</span>
           <button class="btn tiny" type="button" id="btn-connect-bt" onclick="openPrinterModal()">
-            Connect Bluetooth
+            Connect Bluetooth Printer
           </button>
         </div>
       </header>
@@ -59,14 +60,14 @@
               <p class="eyebrow">Current bill</p>
               <h2 id="draft-no">Draft</h2>
             </div>
-            <button class="btn ghost" id="btn-new-bill" type="button">New</button>
+            <button class="btn ghost" id="btn-new-bill" type="button"><b>New</b></button>
           </div>
           <label class="field">
             <span>Customer</span>
             <input id="customer" type="text" placeholder="Walk-in" maxlength="60" />
           </label>
           <div class="ticket-cols">
-            <span>#</span>
+            <span>Items</span>
             <span>Price</span>
             <span>Weight</span>
             <span>Total</span>
