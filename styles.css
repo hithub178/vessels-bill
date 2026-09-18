@@ -725,7 +725,8 @@ button {
 
 .receipt h1 {
   margin: 0 0 2px;
-  font-size: 13px;
+  font-size: 19px;
+  font-weight: 800;
   text-align: center;
   text-transform: uppercase;
   font-family: inherit;
@@ -738,8 +739,15 @@ button {
   margin: 2px 0;
 }
 
+.rc-billno {
+  text-align: left;
+  font-weight: 600;
+  margin: 4px 0 2px;
+}
+
 .rc-thanks {
   margin-top: 8px;
+  font-weight: 700;
 }
 
 .receipt p {
@@ -776,6 +784,12 @@ button {
   white-space: nowrap;
 }
 
+.rc-table tr.rc-spacer td {
+  padding: 0;
+  border-bottom: none;
+  height: 6px;
+}
+
 .rc-total {
   display: flex;
   justify-content: space-between;
@@ -785,6 +799,14 @@ button {
   margin-top: 6px;
   border-top: 1px dashed #111;
   padding-top: 4px;
+}
+
+.rc-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+  margin: 2px 0;
 }
 
 @media (max-width: 1100px) {
