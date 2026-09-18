@@ -5,7 +5,7 @@ const STORAGE = {
   draft: "vessel-pos.draft",
 };
 
-const BUSINESS = "AR VESSELS";
+const BUSINESS = "ABDUL RAHMAN VESSELS";
 const PHONES = ["+91 9442375804", "6383828398"];
 
 const money = (n) =>
@@ -31,6 +31,10 @@ function load(key, fallback) {
 
 function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function businessName() {
+  return (state.shop.name || BUSINESS).toUpperCase();
 }
 
 function initials(name) {
@@ -494,6 +498,15 @@ function qtyText(line) {
   return Number(n.qty).toFixed(2);
 }
 
+function dailyBillNo(bill) {
+  const day = String(bill.createdAt || new Date().toISOString()).slice(0, 10);
+  const sameDay = state.bills
+    .filter((b) => String(b.createdAt).slice(0, 10) === day)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const idx = sameDay.findIndex((b) => b.id === bill.id);
+  return idx >= 0 ? idx + 1 : sameDay.length + 1;
+}
+
 function receiptInner(bill) {
   const rows = bill.lines
     .map((raw) => {
@@ -503,28 +516,33 @@ function receiptInner(bill) {
         <td class="num">${money(line.rate)}</td>
         <td class="num">${qtyText(line)}</td>
         <td class="num">${money(lineAmount(line))}</td>
-      </tr>`;
+      </tr>
+      <tr class="rc-spacer"><td colspan="4"></td></tr>`;
     })
     .join("");
+  const hasReceived = bill.amountReceived != null && bill.amountReceived !== "";
   return `
-    <h1>AR VESSELS</h1>
-    <p class="rc-phone">+91 9442375804</p>
-    <p class="rc-phone">6383828398</p>
+    <h1>${escapeHtml(businessName())}</h1>
+    <p class="rc-phone">+91 9442375804,6383828398</p>
     <p class="rc-date">${receiptDateTime(bill.createdAt)}</p>
+    <p class="rc-billno">Bill No: ${dailyBillNo(bill)}</p>
     ${bill.customer ? `<p>${escapeHtml(bill.customer)}</p>` : ""}
     <table class="rc-table">
       <thead>
         <tr>
-          <th>#</th>
+          <th>Items</th>
           <th class="num">Price</th>
-          <th class="num"></th>
+          <th class="num">Weight</th>
           <th class="num">Total</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
     <p class="rc-total"><span>Grand Total</span><span>${money(bill.grandTotal)}</span></p>
-    <p class="rc-thanks">Thanks for visiting!</p>
+    <p class="rc-line"><span>No. of items</span><span>${bill.lines.length}</span></p>
+    ${hasReceived ? `<p class="rc-line"><span>Amount received</span><span>${money(bill.amountReceived)}</span></p>` : ""}
+    ${hasReceived ? `<p class="rc-line"><span>Change</span><span>${money(bill.change)}</span></p>` : ""}
+    <p class="rc-thanks">Thankyou, Visit again!</p>
   `;
 }
 
@@ -633,16 +651,16 @@ function itemCols(name, price, qty, total) {
   return cell(name, 9) + cell(price, 7, "right") + cell(qty, 8, "right") + cell(total, 8, "right");
 }
 
-function receiptText(bill) {
+function receiptBodyText(bill) {
   const w = 32;
   const when = receiptDateTime(bill.createdAt);
+  const hasReceived = bill.amountReceived != null && bill.amountReceived !== "";
   const lines = [
-    centerLine("AR VESSELS", w),
-    centerLine(PHONES[0], w),
-    centerLine(PHONES[1], w),
+    centerLine(PHONES.join(","), w),
     centerLine(when, w),
+    padLine("Bill No: " + dailyBillNo(bill), "", w),
     "-".repeat(w),
-    itemCols("#", "Price", "", "Total"),
+    itemCols("Items", "Price", "Weight", "Total"),
     "-".repeat(w),
   ];
   (bill.lines || []).forEach((raw) => {
@@ -657,25 +675,42 @@ function receiptText(bill) {
     } else {
       lines.push(itemCols(name, price, qty, total));
     }
+    lines.push("");
   });
   lines.push("-".repeat(w));
   lines.push(padLine("Grand Total", Number(bill.grandTotal || 0).toFixed(2), w));
+  lines.push(padLine("No. of items", String((bill.lines || []).length), w));
+  if (hasReceived) {
+    lines.push(padLine("Amount Received", Number(bill.amountReceived).toFixed(2), w));
+    lines.push(padLine("Change", Number(bill.change || 0).toFixed(2), w));
+  }
   lines.push("");
-  lines.push(centerLine("Thanks for visiting!", w));
+  lines.push(centerLine("Thankyou, Visit again!", w));
   lines.push("", "", "");
   return lines.join("\n") + "\n";
+}
+
+function receiptText(bill) {
+  return centerLine(businessName(), 32) + "\n" + receiptBodyText(bill);
 }
 
 function escPosBytes(bill) {
   const ESC = 0x1b;
   const GS = 0x1d;
   const init = Uint8Array.from([ESC, 0x40, ESC, 0x61, 0x00]);
-  const body = new TextEncoder().encode(receiptText(bill));
+  const boldBigOn = Uint8Array.from([ESC, 0x45, 0x01, GS, 0x21, 0x11]); // bold + double size
+  const boldBigOff = Uint8Array.from([ESC, 0x45, 0x00, GS, 0x21, 0x00]); // back to normal
+  const nameLine = new TextEncoder().encode(centerLine(businessName(), 32) + "\n");
+  const body = new TextEncoder().encode(receiptBodyText(bill));
   const cut = Uint8Array.from([GS, 0x56, 0x41, 0x03]);
-  const out = new Uint8Array(init.length + body.length + cut.length);
-  out.set(init, 0);
-  out.set(body, init.length);
-  out.set(cut, init.length + body.length);
+  const parts = [init, boldBigOn, nameLine, boldBigOff, body, cut];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.length;
+  }
   return out;
 }
 
@@ -809,6 +844,23 @@ async function sendToPrinter(bill) {
   throw new Error("Printer not connected");
 }
 
+function askAmountReceived(grandTotal) {
+  const raw = prompt(`Amount received (Grand Total ${money(grandTotal)}):`, grandTotal.toFixed(2));
+  if (raw === null) return null;
+  const amt = Number(raw);
+  if (!(amt >= 0)) {
+    alert("Enter a valid amount.");
+    return askAmountReceived(grandTotal);
+  }
+  return amt;
+}
+
+function withReceived(bill) {
+  const received = askAmountReceived(bill.grandTotal);
+  if (received === null) return null;
+  return { ...bill, amountReceived: received, change: round2(received - bill.grandTotal) };
+}
+
 function currentDraftBill() {
   const editing = state.bills.find((b) => b.id === state.draft.billId);
   return {
@@ -825,12 +877,15 @@ function printCurrentBill() {
     alert("Add at least one vessel to print.");
     return;
   }
-  printBill(currentDraftBill());
+  const bill = withReceived(currentDraftBill());
+  if (bill) printBill(bill);
 }
 
 function printPreviewBill() {
   const bill = state.bills.find((b) => b.id === state.previewBillId);
-  if (bill) printBill(bill);
+  if (!bill) return;
+  const withAmount = withReceived(bill);
+  if (withAmount) printBill(withAmount);
 }
 
 async function printBill(bill) {
@@ -855,6 +910,10 @@ function saveBill() {
     alert("Add at least one vessel to the bill.");
     return;
   }
+  const total = draftTotal();
+  const received = askAmountReceived(total);
+  if (received === null) return;
+  const change = round2(received - total);
   const now = new Date();
   const existing = state.bills.find((b) => b.id === state.draft.billId);
   const payload = {
@@ -863,7 +922,9 @@ function saveBill() {
       const n = normalizeLine(line);
       return { ...n, amount: lineAmount(n) };
     }),
-    grandTotal: draftTotal(),
+    grandTotal: total,
+    amountReceived: received,
+    change,
   };
   if (existing) {
     Object.assign(existing, payload, { updatedAt: now.toISOString() });
@@ -1054,7 +1115,10 @@ function bind() {
     const printBtn = e.target.closest("[data-print-bill]");
     if (printBtn) {
       const bill = state.bills.find((b) => b.id === printBtn.dataset.printBill);
-      if (bill) printBill(bill);
+      if (bill) {
+        const withAmount = withReceived(bill);
+        if (withAmount) printBill(withAmount);
+      }
     }
 
     const editBillBtn = e.target.closest("[data-edit-bill]");
